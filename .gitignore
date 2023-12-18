@@ -1,0 +1,10 @@
+# Folders
+resources/
+target/
+tokens/
+.settings/
+data/
+
+# Files
+.classpath
+.project
