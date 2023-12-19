@@ -11,7 +11,28 @@ import org.json.JSONObject;
 
 public class OsuApiHandler
 {
-	public static String authenticate(String clientID, String clientSecret) throws IOException, InterruptedException
+	private String clientId;
+	private String clientSecret;
+//	private String osuTokenType = "Bearer"; // Token Type should always be bearer, anyways.
+	private String osuAccessToken;
+	private long osuTokenExpiryEpoch;
+	
+	public OsuApiHandler(String clientId, String clientSecret)
+	{
+		this.clientId = clientId;
+		this.clientSecret = clientSecret;
+		
+		try {updateOsuAuthentication();}
+		catch (IOException | InterruptedException e) {e.printStackTrace();}
+	}
+	
+	
+	/**
+	 * Refreshes the osu! API token.
+	 * @throws IOException
+	 * @throws InterruptedException
+	 */
+	public void updateOsuAuthentication() throws IOException, InterruptedException
 	{
 		HttpClient client = HttpClient.newHttpClient();
 		HttpRequest request = HttpRequest.newBuilder()
@@ -27,23 +48,25 @@ public class OsuApiHandler
 										+ "\"client_secret\": \"%s\", "
 										+ "\"grant_type\": \"%s\", "
 										+ "\"scope\": \"%s\"}",
-										clientID, clientSecret, "client_credentials", "public"
+										clientId, clientSecret, "client_credentials", "public"
 								)
 						)
 				)
 				.build();
 		HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-		return response.body();
+		
+		JSONObject json = new JSONObject(response.body());
+		osuAccessToken = json.get("access_token").toString();
+		osuTokenExpiryEpoch = System.currentTimeMillis()/1000 + Long.parseLong(json.get("expires_in").toString());
 	}
 	
 	
-	
-	public static String requestData(String token, String requestStr) throws IOException, InterruptedException
+	public String requestData(String requestStr) throws IOException, InterruptedException
 	{
 		HttpClient client = HttpClient.newHttpClient();
 		HttpRequest request = HttpRequest.newBuilder()
 				.uri(URI.create("https://osu.ppy.sh/api/v2/" + requestStr))
-				.header("Authorization", "Bearer "+token)
+				.header("Authorization", "Bearer " + getAccessToken())
 				.build();
 		HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 		return response.body();
@@ -56,11 +79,11 @@ public class OsuApiHandler
 	 * @param country
 	 * @return
 	 */
-	public static JSONObject getUsersByRanking(String token, String country, int cursor)
+	public JSONObject getUsersByRanking(String country, int cursor)
 	{
 		try
 		{
-			String jsonStr = requestData(token,
+			String jsonStr = requestData(
 					"rankings/osu/performance/?"
 					+ "country=" + country
 					+ "&page=" + cursor);
@@ -70,13 +93,14 @@ public class OsuApiHandler
 		catch (Exception e) {return null;}
 	}
 	
+
 	/**
 	 * Returns a list of beatmaps given an int-array of IDs (maximum 50).
 	 * @param token
 	 * @param ids
 	 * @return
 	 */
-	public static JSONArray getBeatmapsById(String token, int[] ids)
+	public JSONArray getBeatmapsById(int[] ids)
 	{
 		try
 		{
@@ -86,14 +110,14 @@ public class OsuApiHandler
 				idQueries += "ids[]=" + i + "&";
 			}
 			
-			String jsonStr = requestData(token,
-					"beatmaps" + idQueries);
+			String jsonStr = requestData("beatmaps" + idQueries);
 			
 			return new JSONObject(jsonStr).getJSONArray("beatmaps");
 		}
 		catch (Exception e) {return null;}
 	}
 	
+
 	/**
 	 * Gets all of a player's scores on a beatmap.
 	 * @param token
@@ -101,16 +125,38 @@ public class OsuApiHandler
 	 * @param userId
 	 * @return JSONArray
 	 */
-	public static JSONArray getScoresByBeatmap(String token, int beatmapId, int userId)
+	public JSONArray getScoresByBeatmap(int beatmapId, int userId)
 	{
 		try
 		{
-			String jsonStr = requestData(token,
-					"beatmaps/" + beatmapId + "/scores/users/" + userId + "/all");
+			String jsonStr = requestData("beatmaps/" + beatmapId + "/scores/users/" + userId + "/all");
 			
 			return new JSONObject(jsonStr).getJSONArray("scores");
 		}
 		catch (Exception e) {return null;}
+	}
+	
+	
+	/**
+	 * osuAccessToken get method.
+	 * @return An always-valid access token, at least for the
+	 * next 30 minutes.
+	 */
+	public String getAccessToken()
+	{
+		try
+		{
+			// 1800 seconds = 30 minutes
+			if (osuTokenExpiryEpoch > 1800) {return osuAccessToken;}
+			
+			updateOsuAuthentication();
+			return osuAccessToken;
+		}
+		catch (IOException | InterruptedException e)
+		{
+			e.printStackTrace();
+			return null;
+		}
 	}
 }
 
