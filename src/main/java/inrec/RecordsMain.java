@@ -1,16 +1,13 @@
 package inrec;
 
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.List;
+import java.security.GeneralSecurityException;
 
 import org.json.JSONArray;
-import org.json.JSONObject;
+
+import com.google.api.services.sheets.v4.model.ValueRange;
 
 public class RecordsMain
 {
@@ -20,8 +17,12 @@ public class RecordsMain
 	{
 		try (BufferedReader rankIdReader = new BufferedReader(new FileReader(FP_TOP500));)
 		{
-			OsuApiHandler osuApi = new OsuApiHandler(args[0], args[1]);
+//			OsuApiHandler osuApi = new OsuApiHandler(args[0], args[1]);
 			GSheetsApiHandler sheetsApi = new GSheetsApiHandler(args[2]);
+			
+			
+			ValueRange range = sheetsApi.getValuesFromRange("'api_players'!A1:F1");
+			System.out.println(range.toPrettyString());
 			
 			
 			/*JSONArray ids = new JSONArray();
@@ -50,12 +51,11 @@ public class RecordsMain
 			}*/
 			
 			
-			String jsonStr = osuApi.requestData("beatmaps/lookup");
-			System.out.println(jsonStr);
-			
 //			System.out.println(OsuApiHandler.getBeatmapsById(osuAccessToken, new int[] {1804553}));
 		}
-		catch (IOException | InterruptedException e) {System.out.println("[ERROR] - osu! Authentication Failed.");}
+		catch (IOException e) {System.out.println("[ERROR] - IOException."); e.printStackTrace();}
+		catch (GeneralSecurityException e) {System.out.println("[ERROR] - Google Sheets Security Error.");}
+		catch (Exception e) {e.printStackTrace();}
 	}
 	
 	

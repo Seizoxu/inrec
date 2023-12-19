@@ -1,10 +1,12 @@
 package inrec;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.security.GeneralSecurityException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import com.google.api.client.auth.oauth2.Credential;
@@ -13,19 +15,25 @@ import com.google.api.client.extensions.jetty.auth.oauth2.LocalServerReceiver;
 import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow;
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
-import com.google.api.client.json.jackson2.JacksonFactory;
+import com.google.api.client.http.javanet.NetHttpTransport;
+import com.google.api.client.json.JsonFactory;
+import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.client.util.store.FileDataStoreFactory;
 import com.google.api.services.sheets.v4.Sheets;
 import com.google.api.services.sheets.v4.SheetsScopes;
 import com.google.api.services.sheets.v4.model.ValueRange;
+import com.google.auth.Credentials;
+import com.google.auth.http.HttpCredentialsAdapter;
+import com.google.auth.oauth2.GoogleCredentials;
 
 public class GSheetsApiHandler
 {
 	private static final String GOOGLE_APPLICATION_NAME = "India PP Records";
 	
-	private Sheets sheetsService;
 	private String spreadsheetId;
-	private Credential credential;
+	private Credential credential;			// Credential    is more specific, but more common.
+	private Credentials serviceCredential;	// Credential*s* is more general-purpose.
+	private Sheets sheetsService;
 	
 	
 	public GSheetsApiHandler(String spreadsheetId)
@@ -33,7 +41,8 @@ public class GSheetsApiHandler
 		try
 		{
 			this.spreadsheetId = spreadsheetId;
-			this.credential = authorise();
+			this.credential = authoriseCredential();
+			this.serviceCredential = authoriseServiceCredentials();
 			this.sheetsService = getSheetsService();
 		}
 		catch (IOException | GeneralSecurityException e)
@@ -45,57 +54,78 @@ public class GSheetsApiHandler
 	
 	
 	/**
-	 * Authorises a new Google Sheets Credential.
+	 * Authorises a new Google Sheets Credential (singular).
 	 * @return
 	 * @throws IOException
 	 * @throws GeneralSecurityException
 	 */
-	private Credential authorise() throws IOException, GeneralSecurityException
+	private Credential authoriseCredential() throws IOException, GeneralSecurityException
 	{
-		InputStream in = RecordsMain.class.getResourceAsStream("/credentials.json");
-		GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(
-				JacksonFactory.getDefaultInstance(), new InputStreamReader(in));
+		final JsonFactory jsonFactory = GsonFactory.getDefaultInstance();
+		final NetHttpTransport httpTransport = GoogleNetHttpTransport.newTrustedTransport();
 		
+		InputStream in = RecordsMain.class.getResourceAsStream("/googleSheetsCredentials.json");
+		if (in == null) {throw new FileNotFoundException("Resource not found: googleSheetsCredentials.json.json");}
+		GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(
+				jsonFactory, new InputStreamReader(in));
 		List<String> scopes = Arrays.asList(SheetsScopes.SPREADSHEETS);
 		
 		GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(
-				GoogleNetHttpTransport.newTrustedTransport(),
-				JacksonFactory.getDefaultInstance(),
-				clientSecrets,
-				scopes)
+				httpTransport, jsonFactory, clientSecrets, scopes)
 				.setDataStoreFactory(new FileDataStoreFactory(new java.io.File("tokens")))
 				.setAccessType("offline")
 				.build();
 		
-		Credential credential = new AuthorizationCodeInstalledApp(
-				flow,
-				new LocalServerReceiver())
-				.authorize("user");
+//		Credential credential = new AuthorizationCodeInstalledApp(
+//				flow,
+//				new LocalServerReceiver())
+//				.authorize("user");
+//		return credential;
 		
-		return credential;
+		LocalServerReceiver receiver = new LocalServerReceiver.Builder()
+				.setPort(8888)
+				.build();
+	    return new AuthorizationCodeInstalledApp(flow, receiver).authorize("user");
 	}
-
+	
+	
+	private Credentials authoriseServiceCredentials() throws IOException, FileNotFoundException
+	{
+		InputStream in = GSheetsApiHandler.class.getResourceAsStream("/serviceAccountCredentials.json");
+		if (in == null) {throw new FileNotFoundException("Resource not found: serviceAccountCredentials.json");}
+		
+		return GoogleCredentials.fromStream(in)
+		                .createScoped(Collections.singleton(SheetsScopes.SPREADSHEETS));
+	}
+	
 	
 	/**
-	 * Returns a new Sheets Service from an authorised credential.
+	 * Returns a new Sheets Service from an authorised credential<u>s</u> (plural).
 	 * @return
 	 * @throws IOException
 	 * @throws GeneralSecurityException
 	 */
-	public Sheets getSheetsService() throws IOException, GeneralSecurityException
+	private Sheets getSheetsService() throws IOException, GeneralSecurityException
 	{
 		return new Sheets.Builder(
-				GoogleNetHttpTransport.newTrustedTransport(),
-				JacksonFactory.getDefaultInstance(),
-				credential)
-				.setApplicationName(GOOGLE_APPLICATION_NAME)
-				.build();
+				new NetHttpTransport(),
+		        GsonFactory.getDefaultInstance(),
+		        new HttpCredentialsAdapter(serviceCredential))
+		        .setApplicationName(GOOGLE_APPLICATION_NAME)
+		        .build();
 	}
 	
 	
+	/**
+	 * Returns a ValueRange, given a certain GSheets range.
+	 * @param range
+	 * @return
+	 * @throws IOException
+	 * @throws GeneralSecurityException
+	 */
 	public ValueRange getValuesFromRange(String range) throws IOException, GeneralSecurityException
 	{
-		ValueRange response =  sheetsService.spreadsheets()
+		ValueRange response = sheetsService.spreadsheets()
 				.values()
 				.get(spreadsheetId, range)
 				.execute();

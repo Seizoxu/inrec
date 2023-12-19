@@ -32,7 +32,7 @@ public class OsuApiHandler
 	 * @throws IOException
 	 * @throws InterruptedException
 	 */
-	public void updateOsuAuthentication() throws IOException, InterruptedException
+	private void updateOsuAuthentication() throws IOException, InterruptedException
 	{
 		HttpClient client = HttpClient.newHttpClient();
 		HttpRequest request = HttpRequest.newBuilder()
