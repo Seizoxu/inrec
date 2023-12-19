@@ -21,10 +21,36 @@ import com.google.api.services.sheets.v4.model.ValueRange;
 
 public class GSheetsApiHandler
 {
-	private static Sheets sheetsService;
 	private static final String GOOGLE_APPLICATION_NAME = "India PP Records";
-
-	private static Credential authorise() throws IOException, GeneralSecurityException
+	
+	private Sheets sheetsService;
+	private String spreadsheetId;
+	private Credential credential;
+	
+	
+	public GSheetsApiHandler(String spreadsheetId)
+	{
+		try
+		{
+			this.spreadsheetId = spreadsheetId;
+			this.credential = authorise();
+			this.sheetsService = getSheetsService();
+		}
+		catch (IOException | GeneralSecurityException e)
+		{
+			e.printStackTrace();
+			this.credential = null;
+		}
+	}
+	
+	
+	/**
+	 * Authorises a new Google Sheets Credential.
+	 * @return
+	 * @throws IOException
+	 * @throws GeneralSecurityException
+	 */
+	private Credential authorise() throws IOException, GeneralSecurityException
 	{
 		InputStream in = RecordsMain.class.getResourceAsStream("/credentials.json");
 		GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(
@@ -49,10 +75,15 @@ public class GSheetsApiHandler
 		return credential;
 	}
 
-	public static Sheets getSheetsService() throws IOException, GeneralSecurityException
+	
+	/**
+	 * Returns a new Sheets Service from an authorised credential.
+	 * @return
+	 * @throws IOException
+	 * @throws GeneralSecurityException
+	 */
+	public Sheets getSheetsService() throws IOException, GeneralSecurityException
 	{
-		Credential credential = authorise();
-		
 		return new Sheets.Builder(
 				GoogleNetHttpTransport.newTrustedTransport(),
 				JacksonFactory.getDefaultInstance(),
@@ -61,25 +92,14 @@ public class GSheetsApiHandler
 				.build();
 	}
 	
-	public static void readFromSheet() throws IOException, GeneralSecurityException
+	
+	public ValueRange getValuesFromRange(String range) throws IOException, GeneralSecurityException
 	{
-		sheetsService = getSheetsService();
-		String range = "'api'!A1:B2";
-		
-		ValueRange response =  sheetsService.spreadsheets().values()
-				.get(RecordsMain.spreadsheetId, range)
+		ValueRange response =  sheetsService.spreadsheets()
+				.values()
+				.get(spreadsheetId, range)
 				.execute();
 		
-		List<List<Object>> values = response.getValues();
-		
-		if (values == null || values.isEmpty())
-		{
-			System.out.println("No Data Found.");
-		}
-		else
-		{
-			for (List<Object> row : values) {System.out.println(row.get(0) + " || " + row.get(1));}
-		}
+		return response;
 	}
-
 }

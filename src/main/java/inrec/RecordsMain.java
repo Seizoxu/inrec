@@ -14,8 +14,6 @@ import org.json.JSONObject;
 
 public class RecordsMain
 {
-	public static String spreadsheetId;
-
 	private static final String FP_TOP500 = "data/topRankIds.txt";
 	
 	public static void main(String[] args)
@@ -23,7 +21,7 @@ public class RecordsMain
 		try (BufferedReader rankIdReader = new BufferedReader(new FileReader(FP_TOP500));)
 		{
 			OsuApiHandler osuApi = new OsuApiHandler(args[0], args[1]);
-			spreadsheetId = args[2];
+			GSheetsApiHandler sheetsApi = new GSheetsApiHandler(args[2]);
 			
 			
 			/*JSONArray ids = new JSONArray();

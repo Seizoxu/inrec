@@ -42,4 +42,16 @@ public class Old
 				starRating, length, approachRate, overallDifficulty, circleSize, hpDrain
 				));
 	}
+	
+	// get gsheets thing and do this
+	/*List<List<Object>> values = response.getValues();
+	
+	if (values == null || values.isEmpty())
+	{
+		System.out.println("No Data Found.");
+	}
+	else
+	{
+		for (List<Object> row : values) {System.out.println(row.get(0) + " || " + row.get(1));}
+	}*/
 }

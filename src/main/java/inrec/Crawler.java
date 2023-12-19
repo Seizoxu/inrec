@@ -59,4 +59,13 @@ public class Crawler
 		}
 		catch (IOException e) {e.printStackTrace();}
 	}
+	
+	
+	/**
+	 * Updates user scores from recents and top plays.
+	 */
+	public static void updateUserScores()
+	{
+		//TODO: make the thing after working with GSheets.
+	}
 }
