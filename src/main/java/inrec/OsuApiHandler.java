@@ -82,7 +82,7 @@ public class OsuApiHandler
 	 * STD PP rankings.
 	 * @param token
 	 * @param country
-	 * @return
+	 * @return JSONObject of 50 players' data.
 	 */
 	public JSONObject getUsersByRanking(String country, int cursor)
 	{

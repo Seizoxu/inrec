@@ -94,8 +94,7 @@ public class GSheetsApiHandler
 		InputStream in = GSheetsApiHandler.class.getResourceAsStream("/serviceAccountCredentials.json");
 		if (in == null) {throw new FileNotFoundException("Resource not found: serviceAccountCredentials.json");}
 		
-		return GoogleCredentials.fromStream(in)
-		                .createScoped(Collections.singleton(SheetsScopes.SPREADSHEETS));
+		return GoogleCredentials.fromStream(in).createScoped(Collections.singleton(SheetsScopes.SPREADSHEETS));
 	}
 	
 	
