@@ -2,6 +2,10 @@ package inrec;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -73,7 +77,7 @@ public class Crawler
 		
 
 		// Update top 500 players.
-		JSONArray topPlayers = getAndUpdateTopPlayers(osuApi, sheetsApi, "IN", 1);
+		List<List<Object>> topPlayers = getAndUpdateTopPlayers(osuApi, sheetsApi, "IN", 10);
 
 		
 
@@ -90,7 +94,7 @@ public class Crawler
 	
 	private static void updateModSheets(GSheetsApiHandler sheetsApi)
 	{
-		
+		//TODO: Move from api_update to api_scores.
 	}
 	
 	
@@ -102,7 +106,8 @@ public class Crawler
 	 * @return JSONArray of player data.
 	 * @throws IOException
 	 */
-	private static JSONArray getAndUpdateTopPlayers(OsuApiHandler osuApi, GSheetsApiHandler sheetsApi, String country, int pages)
+	private static List<List<Object>> getAndUpdateTopPlayers(OsuApiHandler osuApi, GSheetsApiHandler sheetsApi,
+			String country, int pages) throws IOException
 	{
 		// Get top players.
 		JSONArray rankings = new JSONArray();
@@ -113,25 +118,29 @@ public class Crawler
 		}
 		System.out.println("[LOAD] Retrieved top " + 50*pages + " Indian players.");
 		
+		
 		// Filter top ranks to display relevant info.
-		JSONArray rankingsFiltered = new JSONArray();
+		List<List<Object>> rankingsFiltered = new ArrayList<List<Object>>();
 		for (int i = 0; i < rankings.length(); i++)
 		{
 			JSONObject currentPlayer = rankings.getJSONObject(i);
 
-			rankingsFiltered.put(
-					new JSONObject()
-					.put("username", currentPlayer.getJSONObject("user").getString("username"))
-					.put("id", currentPlayer.getJSONObject("user").getInt("id"))
-					.put("global_rank", currentPlayer.getInt("global_rank"))
-					.put("pp", currentPlayer.getDouble("pp"))
-					.put("country_rank", i+1)
-					.put("hit_accuracy", currentPlayer.getDouble("hit_accuracy"))
-					);
+			// For future reference, JSONObjects from org.json do not preserve order.
+			List<Object> playerData = new ArrayList<>();
+			playerData.addAll(List.of(
+					i+1,														// country_rank
+					currentPlayer.getJSONObject("user").getInt("id"),			// user_id
+					currentPlayer.getJSONObject("user").getString("username"),	// username
+					currentPlayer.getInt("global_rank"),						// global_rank
+					currentPlayer.getDouble("pp"),								// pp
+					currentPlayer.getDouble("hit_accuracy")						// hit_accuracy
+					));
+			
+			rankingsFiltered.add(playerData);
 		}
 		
-		// Update api_players.
-		
+		sheetsApi.editRange("api_players!A2:F", rankingsFiltered);
+		System.out.println("[LOG] Updated api_players.");
 		
 		return rankingsFiltered;
 	}
