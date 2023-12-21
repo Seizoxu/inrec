@@ -14,9 +14,6 @@ public class RecordsMain
 			GSheetsApiHandler sheetsApi = new GSheetsApiHandler(args[2]);
 			
 			Crawler.updateSheets(osuApi, sheetsApi);
-			
-			
-//			System.out.println(OsuApiHandler.getBeatmapsById(osuAccessToken, new int[] {1804553}));
 		}
 		catch (IOException e) {System.out.println("[ERROR] - IOException."); e.printStackTrace();}
 		catch (GeneralSecurityException e) {System.out.println("[ERROR] - Google Sheets Security Error."); e.printStackTrace();}

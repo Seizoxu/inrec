@@ -59,8 +59,38 @@ public class OsuApiHandler
 		osuAccessToken = json.get("access_token").toString();
 		osuTokenExpiryEpoch = System.currentTimeMillis()/1000 + Long.parseLong(json.get("expires_in").toString());
 	}
+
+	
+	/**
+	 * osuAccessToken get method.
+	 * @return An always-valid access token, at least for the
+	 * next 30 minutes.
+	 */
+	private String getAccessToken()
+	{
+		try
+		{
+			// 1800 seconds = 30 minutes
+			if (osuTokenExpiryEpoch > 1800) {return osuAccessToken;}
+			
+			updateOsuAuthentication();
+			return osuAccessToken;
+		}
+		catch (IOException | InterruptedException e)
+		{
+			e.printStackTrace();
+			return null;
+		}
+	}
 	
 	
+	/**
+	 * Generic method for requesting data from osu API v2.
+	 * @param requestStr
+	 * @return String formatted in JSON.
+	 * @throws IOException
+	 * @throws InterruptedException
+	 */
 	public String requestData(String requestStr) throws IOException, InterruptedException
 	{
 		HttpClient client = HttpClient.newHttpClient();
@@ -82,14 +112,14 @@ public class OsuApiHandler
 	 * STD PP rankings.
 	 * @param token
 	 * @param country
-	 * @return JSONObject of 50 players' data.
+	 * @return JSONObject of 50 users' data.
 	 */
 	public JSONObject getUsersByRanking(String country, int cursor)
 	{
 		try
 		{
 			String jsonStr = requestData(
-					"rankings/osu/performance/?"
+					"rankings/osu/performance?"
 					+ "country=" + country
 					+ "&page=" + cursor);
 			
@@ -124,7 +154,7 @@ public class OsuApiHandler
 	
 
 	/**
-	 * Gets all of a player's scores on a beatmap.
+	 * Gets all of a user's scores on a beatmap.
 	 * @param token
 	 * @param beatmapId
 	 * @param userId
@@ -143,21 +173,22 @@ public class OsuApiHandler
 	
 	
 	/**
-	 * osuAccessToken get method.
-	 * @return An always-valid access token, at least for the
-	 * next 30 minutes.
+	 * Returns 100 top plays of a specified user.
+	 * @param userId
+	 * @param scoreType: can be "best" "firsts" or "recent"
+	 * @return JSONArray of top plays.
 	 */
-	public String getAccessToken()
+	public JSONArray getPlaysById(int userId, String scoreType, int limit)
 	{
 		try
 		{
-			// 1800 seconds = 30 minutes
-			if (osuTokenExpiryEpoch > 1800) {return osuAccessToken;}
+			String jsonStr = requestData(String.format(
+					"users/%s/scores/%s?mode=osu&limit=%d",
+					userId, scoreType, limit));
 			
-			updateOsuAuthentication();
-			return osuAccessToken;
+			return new JSONArray(jsonStr);
 		}
-		catch (IOException | InterruptedException e)
+		catch (Exception e)
 		{
 			e.printStackTrace();
 			return null;

@@ -4,14 +4,19 @@ import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
+import java.util.Map;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class Crawler
 {
+	private static final List<String> ALLOWED_STATUSES = List.of("ranked", "approved");
+	private static final String[] MOD_ORDER = {
+			"EZ", "NF", "HT",
+			"HR", "SD", "PF", "DT", "NC", "HD", "FL",
+			"SO"
+	};
 	/*private static final String FP_BEATMAP_IDS_RANKED = "data/beatmapIds-ranked.txt";
 	private static final String FP_BEATMAP_IDS_LOVED = "data/beatmapIds-loved.txt";
 	private static final String FP_BEATMAP_IDS_GRAVEYARDED = "data/beatmapIds-graveyarded.txt";
@@ -78,17 +83,17 @@ public class Crawler
 
 		// Update top 500 players.
 		List<List<Object>> topPlayers = getAndUpdateTopPlayers(osuApi, sheetsApi, "IN", 10);
-
 		
 
 		// Retrieve scores from top 500.
-		
-		
-		// Crawl for user updates.
+		crawlAndUpdateScores(
+				osuApi,
+				sheetsApi,
+				topPlayers.stream().map(x -> (Integer) x.get(1)).toList());
 		
 		
 		// Update sheets from api_updates
-		
+		updateModSheets(sheetsApi);
 	}
 	
 	
@@ -149,9 +154,47 @@ public class Crawler
 	/**
 	 * Crawls scores from user tops and recents.
 	 * @return Number of scores crawled.
+	 * @throws IOException 
 	 */
-	private static int crawlScores()
+	private static void crawlAndUpdateScores(OsuApiHandler osuApi, GSheetsApiHandler sheetsApi, List<Integer> ids) throws IOException
 	{
-		return 0;
+		List<List<Object>> values = new ArrayList<List<Object>>();
+
+		for (Integer userId : ids)
+		{
+			List<JSONObject> plays = osuApi.getPlaysById(userId, "best", 100)
+					.toList().stream()
+					.map(x -> new JSONObject((Map<?, ?>) x))
+					.toList();
+			
+			for (JSONObject play : plays)
+			{
+				if (!ALLOWED_STATUSES.contains(play.getJSONObject("beatmap").getString("status"))) {continue;}
+
+				String mods = "";
+				for (String mod : MOD_ORDER)
+				{
+					if (play.getJSONArray("mods").toList().contains(mod)) {mods += mod;}
+				}
+				
+				String artistTitleDiff = String.format("%s - %s [%s]",
+						play.getJSONObject("beatmapset").get("artist"),
+						play.getJSONObject("beatmapset").get("title"),
+						play.getJSONObject("beatmap").get("version"));
+				
+				values.add(List.of(
+						userId,										// User ID
+						play.getJSONObject("beatmap").get("id"),	// Map ID
+						play.get("id"),								// Score ID
+						play.getJSONObject("user").get("username"),	// Username
+						artistTitleDiff,							// Artist, Title, Diff
+						play.get("pp"),								// PP
+						mods										// Mods
+						));
+			}
+		}
+		
+		sheetsApi.editRange("api_updates!B2:H", values);
+		System.out.println("[LOG] Updated api_updates.");
 	}
 }
