@@ -5,7 +5,6 @@ import java.security.GeneralSecurityException;
 
 public class RecordsMain
 {
-	
 	public static void main(String[] args)
 	{
 		try

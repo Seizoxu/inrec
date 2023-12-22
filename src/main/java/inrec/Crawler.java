@@ -3,8 +3,10 @@ package inrec;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -15,100 +17,122 @@ public class Crawler
 	private static final String[] MOD_ORDER = {
 			"EZ", "NF", "HT",
 			"HR", "SD", "PF", "DT", "NC", "HD", "FL",
-			"SO"
+			"SO", "TD"
 	};
-	/*private static final String FP_BEATMAP_IDS_RANKED = "data/beatmapIds-ranked.txt";
-	private static final String FP_BEATMAP_IDS_LOVED = "data/beatmapIds-loved.txt";
-	private static final String FP_BEATMAP_IDS_GRAVEYARDED = "data/beatmapIds-graveyarded.txt";
-	private static final String FP_BEATMAP_IDS_OTHER = "data/beatmapIds-other.txt";*/
-	
-	
-	/**
-	 * Updates the beatmap ID lists with the latest maps via crawling.
-	 */
-	/*public static void getAndSortBeatmaps()
-	{
-		List<String> filePaths = Arrays.asList(
-                FP_BEATMAP_IDS_RANKED,
-                FP_BEATMAP_IDS_LOVED,
-                FP_BEATMAP_IDS_GRAVEYARDED,
-                FP_BEATMAP_IDS_OTHER
-        );
-
-		// Find max ID out of all files.
-        int nextId = 1;
-        for (String filePath : filePaths)
-        {
-            try (BufferedReader reader = new BufferedReader(new FileReader(filePath)))
-            {
-                String line;
-                while ((line = reader.readLine()) != null)
-                {
-                    try
-                    {
-                        int id = Integer.parseInt(line.trim());
-                        nextId = Math.max(nextId, id);
-                    }
-                    catch (NumberFormatException e) {System.err.println("Skipping invalid line in file: " + filePath);}
-                }
-            }
-            catch (IOException e) {e.printStackTrace();}
-        }
+	private static final Map<String, String> MOD_REMAP = Map.of(
+			"NF","",	"SO","",
+			"SD","",	"PF","",
+			"TD","",	"NC","DT"
+	);
+	private static final List<String> MOD_COMBINATIONS = List.of(
+			"NM", "EZ", "HT", "HR", "DT", "HD", "FL", "EZHT", "EZDT", "EZHD", "EZFL", "HTHR", "HTHD", "HTFL", "HRDT",
+			"HRHD", "HRFL", "DTHD", "DTFL", "HDFL", "EZHTHD", "EZHTFL", "EZDTHD", "EZDTFL", "EZHDFL", "HTHRHD", "HTHRFL",
+			"HTHDFL", "HRDTHD", "HRDTFL", "HRHDFL", "DTHDFL", "EZHTHDFL", "EZDTHDFL", "HTHRHDFL", "HRDTHDFL"
+	);
 		
-		try (
-				BufferedWriter rankedWriter= new BufferedWriter(new FileWriter(FP_BEATMAP_IDS_RANKED, true));
-				BufferedWriter lovedWriter = new BufferedWriter(new FileWriter(FP_BEATMAP_IDS_LOVED, true));
-				BufferedWriter graveyardedWriter = new BufferedWriter(new FileWriter(FP_BEATMAP_IDS_GRAVEYARDED, true));
-				BufferedWriter otherWriter = new BufferedWriter(new FileWriter(FP_BEATMAP_IDS_OTHER, true));
-			)
-		{
-			///////////////////
-		}
-		catch (IOException e) {e.printStackTrace();}
-	}*/
-	
 	
 	/**
 	 * Crawls for user scores updates, and updates scores.
+	 * @throws InterruptedException 
 	 */
-	public static void updateSheets(OsuApiHandler osuApi, GSheetsApiHandler sheetsApi) throws IOException, GeneralSecurityException
+	public static void updateSheets(OsuApiHandler osuApi, GSheetsApiHandler sheetsApi)
+			throws IOException, GeneralSecurityException, InterruptedException
 	{
-		// Make sure api_updates sheet is empty.
-		int currentUpdateCount = Integer.parseInt(sheetsApi.getValuesFromRange("api!C5").getValues().get(0).get(0).toString());
-		if (currentUpdateCount > 0)
-		{
-			updateModSheets(sheetsApi);
-		}
-		
-
 		// Update top 500 players.
-		List<List<Object>> topPlayers = getAndUpdateTopPlayers(osuApi, sheetsApi, "IN", 10);
+		List<List<Object>> topPlayers = getAndUpdateTopPlayers(osuApi, sheetsApi, "IN", 1);
 		
 
 		// Retrieve scores from top 500.
-		crawlAndUpdateScores(
+		List<List<Object>> plays = crawlScores(
 				osuApi,
-				sheetsApi,
 				topPlayers.stream().map(x -> (Integer) x.get(1)).toList());
 		
 		
-		// Update sheets from api_updates
-		updateModSheets(sheetsApi);
+		// Update sheets from crawled plays.
+		updateModSheets(sheetsApi, plays);
 	}
 	
 	
-	private static void updateModSheets(GSheetsApiHandler sheetsApi)
+	//TODO: Optimise
+	private static void updateModSheets(GSheetsApiHandler sheetsApi, List<List<Object>> plays)
+			throws IOException, GeneralSecurityException
 	{
-		//TODO: Move from api_update to api_scores.
+		// Convert extra mods (MOD_REMAP) to normal.
+		List<List<Object>> remoddedPlays = plays.stream()
+				.map(row -> row.stream().map(Crawler::remapValue).collect(Collectors.toList()))
+				.collect(Collectors.toList());
+		
+		// Retrieve the score IDs that are already there.
+		
+		// Put 2D lists into a hashmap, key being all mod combos, value being 2d list of cells.
+		Map<String, List<List<Object>>> sortedPlays = new LinkedHashMap<>();
+		for (int i = 0; i < MOD_COMBINATIONS.size(); i++)
+		{
+			sortedPlays.put(MOD_COMBINATIONS.get(i), new ArrayList<List<Object>>(100));
+		}
+		sortedPlays.put("EXC", new ArrayList<List<Object>>(100));
+		
+		String mod;
+		for (int i = 0; i < plays.size(); i++)
+		{
+			//TODO: check if scoreid exists in sheet.
+			
+			mod = remoddedPlays.get(i).get(6).toString();
+			if (MOD_COMBINATIONS.contains(mod))
+			{
+				sortedPlays.get(mod).add(plays.get(i));
+			}
+			else if (mod.equals(""))
+			{
+				sortedPlays.get("NM").add(plays.get(i));
+			}
+			else
+			{
+				sortedPlays.get("EXC").add(plays.get(i));
+			}
+		}
+		
+
+		// Send hashmap to gsheets tabs. Remember to check lengths.
+		int sheetsIndex = 0;
+        for (Map.Entry<String, List<List<Object>>> entry : sortedPlays.entrySet())
+		{
+        	int playCount = Integer.parseInt(sheetsApi.getValuesFromRange("api!C" + (11+sheetsIndex) )
+        			.getValues().get(0).get(0).toString());
+			sheetsApi.editRange(
+					entry.getKey()+"!B"+(2+playCount)+":I",
+					entry.getValue());
+			sheetsIndex++;
+		}
+	}
+	
+	
+	/**
+	 * Recursively checks through a list to map mods.
+	 * @param originalValue
+	 * @return
+	 */
+	private static Object remapValue(Object originalValue)
+	{
+		if (originalValue instanceof List<?>)
+		{
+			List<?> sublist = (List<?>) originalValue;
+			return sublist.stream().map(Crawler::remapValue).collect(Collectors.toList());
+		}
+		else
+		{
+			return MOD_REMAP.getOrDefault(originalValue, originalValue.toString());
+		}
 	}
 	
 	
 	/**
 	 * Returns top x players from a certain country.
-	 * @param osuApi
-	 * @param country
-	 * @param pages (50 players per page)
-	 * @return JSONArray of player data.
+	 * @param osuApi 	-	osu! API instance
+	 * @param sheetsApi	- Google Sheets API instance
+	 * @param country	- ISO 3166-1 country code
+	 * @param pages		- int page (50 players per page)
+	 * @return			JSONArray of player data.
 	 * @throws IOException
 	 */
 	private static List<List<Object>> getAndUpdateTopPlayers(OsuApiHandler osuApi, GSheetsApiHandler sheetsApi,
@@ -121,7 +145,7 @@ public class Crawler
 			JSONArray rankingPage = osuApi.getUsersByRanking("IN", i+1).getJSONArray("ranking");
 			rankings.putAll(rankingPage);
 		}
-		System.out.println("[LOAD] Retrieved top " + 50*pages + " Indian players.");
+		System.out.println("[LOG] Retrieved top " + 50*pages + " Indian players.");
 		
 		
 		// Filter top ranks to display relevant info.
@@ -155,14 +179,19 @@ public class Crawler
 	 * Crawls scores from user tops and recents.
 	 * @return Number of scores crawled.
 	 * @throws IOException 
+	 * @throws InterruptedException 
 	 */
-	private static void crawlAndUpdateScores(OsuApiHandler osuApi, GSheetsApiHandler sheetsApi, List<Integer> ids) throws IOException
+	private static List<List<Object>> crawlScores(OsuApiHandler osuApi, List<Integer> ids)
+			throws IOException, InterruptedException
 	{
-		List<List<Object>> values = new ArrayList<List<Object>>();
+		List<List<Object>> values = new ArrayList<List<Object>>(ids.size()*150);
 
 		for (Integer userId : ids)
 		{
-			List<JSONObject> plays = osuApi.getPlaysById(userId, "best", 100)
+			// API ratelimit (shouldn't matter too much, 500 ids = 9 mins.
+			Thread.sleep(1000);
+			
+			List<JSONObject> plays = osuApi.getPlaysById(userId, "best", 5)
 					.toList().stream()
 					.map(x -> new JSONObject((Map<?, ?>) x))
 					.toList();
@@ -189,12 +218,13 @@ public class Crawler
 						play.getJSONObject("user").get("username"),	// Username
 						artistTitleDiff,							// Artist, Title, Diff
 						play.get("pp"),								// PP
-						mods										// Mods
+						mods,										// Mods
+						play.get("created_at")						// Timestamp
 						));
 			}
 		}
 		
-		sheetsApi.editRange("api_updates!B2:H", values);
-		System.out.println("[LOG] Updated api_updates.");
+		System.out.println("[LOG] Crawled all scores.");
+		return values;
 	}
 }

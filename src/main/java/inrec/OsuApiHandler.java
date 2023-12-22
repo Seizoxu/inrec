@@ -119,8 +119,8 @@ public class OsuApiHandler
 		try
 		{
 			String jsonStr = requestData(
-					"rankings/osu/performance?"
-					+ "country=" + country
+					"rankings/osu/performance?mode=osu"
+					+ "&country=" + country
 					+ "&page=" + cursor);
 			
 			return new JSONObject(jsonStr);
