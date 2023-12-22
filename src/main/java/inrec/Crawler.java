@@ -3,10 +3,12 @@ package inrec;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.json.JSONArray;
@@ -25,7 +27,7 @@ public class Crawler
 			"SD","",	"PF","",
 			"TD","",	"NC","DT"
 	);
-	private static final List<String> MOD_COMBINATIONS = List.of(
+	public static final List<String> MOD_COMBINATIONS = List.of(
 			"NM", "EZ", "HT", "HR", "DT", "HD", "FL", "EZHT", "EZDT", "EZHD", "EZFL", "HTHR", "HTHD", "HTFL", "HRDT",
 			"HRHD", "HRFL", "DTHD", "DTFL", "HDFL", "EZHTHD", "EZHTFL", "EZDTHD", "EZDTFL", "EZHDFL", "HTHRHD", "HTHRFL",
 			"HTHDFL", "HRDTHD", "HRDTFL", "HRHDFL", "DTHDFL", "EZHTHDFL", "EZDTHDFL", "HTHRHDFL", "HRDTHDFL"
@@ -67,30 +69,38 @@ public class Crawler
 			}).collect(Collectors.toList());
 		
 		
-		// Retrieve the score IDs that are already there.
-		
-		
 		// Put 2D lists into a hashmap, key being all mod combos, value being 2d list of cells.
-		Map<String, List<List<Object>>> sortedPlays = new LinkedHashMap<>();
+		Map<String, List<List<Object>>> sortedPlays = new LinkedHashMap<>(37);
+		Map<String, List<Long>> existingScoreIds = new LinkedHashMap<>(37);
 		for (int i = 0; i < MOD_COMBINATIONS.size(); i++)
 		{
-			sortedPlays.put(MOD_COMBINATIONS.get(i), new ArrayList<List<Object>>(100));
+			String mod = MOD_COMBINATIONS.get(i);
+			sortedPlays.put(mod, new ArrayList<List<Object>>(100));
+			
+			existingScoreIds.put(mod,
+					Optional.ofNullable(sheetsApi.getValuesFromRange(mod + "!D2:D").getValues())
+					.orElse(Collections.emptyList()).stream()
+					.flatMap(List::stream)
+					.map(Object::toString)
+					.map(Long::parseLong)
+					.toList());
 		}
 		sortedPlays.put("EXC", new ArrayList<List<Object>>(100));
 		
-		String mod;
+		
+		// Sort plays into sortedPlays by mod combo.
 		for (int i = 0; i < plays.size(); i++)
 		{
-			//TODO: check if scoreid exists in sheet.
+			String mod = remoddedMods.get(i).toString();
+			long scoreId = Long.parseLong(plays.get(i).get(2).toString());
 			
-			mod = remoddedMods.get(i).toString();
+			if (mod.isEmpty()) {mod = "NM";}
+			if (Optional.ofNullable(existingScoreIds.get(mod)).orElse(Collections.emptyList()).contains(scoreId))
+				{continue;}
+			
 			if (MOD_COMBINATIONS.contains(mod))
 			{
 				sortedPlays.get(mod).add(plays.get(i));
-			}
-			else if (mod.equals(""))
-			{
-				sortedPlays.get("NM").add(plays.get(i));
 			}
 			else
 			{
@@ -208,12 +218,29 @@ public class Crawler
 			// API ratelimit (shouldn't matter too much, 500 ids = 9 mins.
 			Thread.sleep(1000);
 			
-			List<JSONObject> plays = osuApi.getPlaysById(userId, "best", 5)
+			List<JSONObject> topPlays = osuApi.getPlaysById(userId, "best", 5)
 					.toList().stream()
 					.map(x -> new JSONObject((Map<?, ?>) x))
 					.toList();
+//			List<JSONObject> globalTopPlays = osuApi.getPlaysById(userId, "firsts", 1000)
+//					.toList().stream()
+//					.map(x -> new JSONObject((Map<?, ?>) x))
+//					.toList();
+//			List<JSONObject> recentPlays = osuApi.getPlaysById(userId, "recent", 1000)
+//					.toList().stream()
+//					.map(x -> new JSONObject((Map<?, ?>) x))
+//					.toList();
+//			List<JSONObject> pinnedPlays = osuApi.getPlaysById(userId, "pinned", 100)
+//					.toList().stream()
+//					.map(x -> new JSONObject((Map<?, ?>) x))
+//					.toList();
+ 
+			List<JSONObject> totalPlays = new ArrayList<>(topPlays);
+//			totalPlays.addAll(globalTopPlays);
+//			totalPlays.addAll(recentPlays);
+//			totalPlays.addAll(pinnedPlays);
 			
-			for (JSONObject play : plays)
+			for (JSONObject play : totalPlays)
 			{
 				if (!ALLOWED_STATUSES.contains(play.getJSONObject("beatmap").getString("status"))) {continue;}
 
