@@ -3,6 +3,7 @@ package inrec;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,7 +20,7 @@ public class Crawler
 			"HR", "SD", "PF", "DT", "NC", "HD", "FL",
 			"SO", "TD"
 	};
-	private static final Map<String, String> MOD_REMAP = Map.of(
+	public static final Map<String, String> MOD_REMAP = Map.of(
 			"NF","",	"SO","",
 			"SD","",	"PF","",
 			"TD","",	"NC","DT"
@@ -58,11 +59,16 @@ public class Crawler
 			throws IOException, GeneralSecurityException
 	{
 		// Convert extra mods (MOD_REMAP) to normal.
-		List<List<Object>> remoddedPlays = plays.stream()
-				.map(row -> row.stream().map(Crawler::remapValue).collect(Collectors.toList()))
-				.collect(Collectors.toList());
+		List<Object> remoddedMods = plays.stream()
+				.map(row -> {
+			if (row.size() >= 7)
+				{return Crawler.remapValue(row.get(6));}
+			else {return null;}
+			}).collect(Collectors.toList());
+		
 		
 		// Retrieve the score IDs that are already there.
+		
 		
 		// Put 2D lists into a hashmap, key being all mod combos, value being 2d list of cells.
 		Map<String, List<List<Object>>> sortedPlays = new LinkedHashMap<>();
@@ -77,7 +83,7 @@ public class Crawler
 		{
 			//TODO: check if scoreid exists in sheet.
 			
-			mod = remoddedPlays.get(i).get(6).toString();
+			mod = remoddedMods.get(i).toString();
 			if (MOD_COMBINATIONS.contains(mod))
 			{
 				sortedPlays.get(mod).add(plays.get(i));
@@ -94,35 +100,46 @@ public class Crawler
 		
 
 		// Send hashmap to gsheets tabs. Remember to check lengths.
-		int sheetsIndex = 0;
+		List<List<Object>> playCounts = sheetsApi.getValuesFromRange("api!B11:C47").getValues();
+		Map<String, Integer> playCountsMap = new HashMap<>();
+		for (List<Object> row : playCounts)
+		{
+			playCountsMap.put(
+					row.get(0).toString(),
+					Integer.parseInt(row.get(1).toString()));
+		}
+		
         for (Map.Entry<String, List<List<Object>>> entry : sortedPlays.entrySet())
 		{
-        	int playCount = Integer.parseInt(sheetsApi.getValuesFromRange("api!C" + (11+sheetsIndex) )
-        			.getValues().get(0).get(0).toString());
 			sheetsApi.editRange(
-					entry.getKey()+"!B"+(2+playCount)+":I",
+					entry.getKey()+"!B"+(2+playCountsMap.get(entry.getKey()))+":I",
 					entry.getValue());
-			sheetsIndex++;
 		}
 	}
 	
 	
 	/**
-	 * Recursively checks through a list to map mods.
+	 * Remaps an extraneous mod to normal mods (NC to DT, NFSO to NM, etc).
 	 * @param originalValue
 	 * @return
 	 */
 	private static Object remapValue(Object originalValue)
 	{
-		if (originalValue instanceof List<?>)
+		String modString = originalValue.toString();
+		List<String> modlist = new ArrayList<>(4);
+		for (int i = 0; i < modString.length(); i += 2)
 		{
-			List<?> sublist = (List<?>) originalValue;
-			return sublist.stream().map(Crawler::remapValue).collect(Collectors.toList());
+			int endIndex = Math.min(i+2, modString.length());
+			modlist.add(modString.substring(i, endIndex));
 		}
-		else
+		
+		String remodString = "";
+		for (String mod : modlist)
 		{
-			return MOD_REMAP.getOrDefault(originalValue, originalValue.toString());
+			remodString += Crawler.MOD_REMAP.getOrDefault(mod, mod.toString());
 		}
+		
+		return remodString;
 	}
 	
 	
@@ -157,12 +174,12 @@ public class Crawler
 			// For future reference, JSONObjects from org.json do not preserve order.
 			List<Object> playerData = new ArrayList<>();
 			playerData.addAll(List.of(
-					i+1,														// country_rank
-					currentPlayer.getJSONObject("user").getInt("id"),			// user_id
-					currentPlayer.getJSONObject("user").getString("username"),	// username
-					currentPlayer.getInt("global_rank"),						// global_rank
-					currentPlayer.getDouble("pp"),								// pp
-					currentPlayer.getDouble("hit_accuracy")						// hit_accuracy
+					i+1,														// [0] country_rank
+					currentPlayer.getJSONObject("user").getInt("id"),			// [1] user_id
+					currentPlayer.getJSONObject("user").getString("username"),	// [2] username
+					currentPlayer.getInt("global_rank"),						// [3] global_rank
+					currentPlayer.getDouble("pp"),								// [4] pp
+					currentPlayer.getDouble("hit_accuracy")						// [5] hit_accuracy
 					));
 			
 			rankingsFiltered.add(playerData);
@@ -212,14 +229,14 @@ public class Crawler
 						play.getJSONObject("beatmap").get("version"));
 				
 				values.add(List.of(
-						userId,										// User ID
-						play.getJSONObject("beatmap").get("id"),	// Map ID
-						play.get("id"),								// Score ID
-						play.getJSONObject("user").get("username"),	// Username
-						artistTitleDiff,							// Artist, Title, Diff
-						play.get("pp"),								// PP
-						mods,										// Mods
-						play.get("created_at")						// Timestamp
+						userId,										// [0] User ID
+						play.getJSONObject("beatmap").get("id"),	// [1] Map ID
+						play.get("id"),								// [2] Score ID
+						play.getJSONObject("user").get("username"),	// [3] Username
+						artistTitleDiff,							// [4] Artist, Title, Diff
+						play.get("pp"),								// [5] PP
+						mods,										// [6] Mods
+						play.get("created_at")						// [7] Timestamp
 						));
 			}
 		}
