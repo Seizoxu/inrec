@@ -23,6 +23,8 @@ import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.client.util.store.FileDataStoreFactory;
 import com.google.api.services.sheets.v4.Sheets;
 import com.google.api.services.sheets.v4.SheetsScopes;
+import com.google.api.services.sheets.v4.model.BatchClearValuesRequest;
+import com.google.api.services.sheets.v4.model.BatchClearValuesResponse;
 import com.google.api.services.sheets.v4.model.BatchUpdateValuesRequest;
 import com.google.api.services.sheets.v4.model.BatchUpdateValuesResponse;
 import com.google.api.services.sheets.v4.model.ValueRange;
@@ -112,10 +114,10 @@ public class GSheetsApiHandler
 	{
 		return new Sheets.Builder(
 				new NetHttpTransport(),
-		        GsonFactory.getDefaultInstance(),
-		        new HttpCredentialsAdapter(serviceCredential))
-		        .setApplicationName(GOOGLE_APPLICATION_NAME)
-		        .build();
+				GsonFactory.getDefaultInstance(),
+				new HttpCredentialsAdapter(serviceCredential))
+				.setApplicationName(GOOGLE_APPLICATION_NAME)
+				.build();
 	}
 	
 	
@@ -157,7 +159,6 @@ public class GSheetsApiHandler
 		BatchUpdateValuesResponse result = null;
 		try
 		{
-			// Updates the values in the specified range.
 			BatchUpdateValuesRequest body = new BatchUpdateValuesRequest()
 					.setValueInputOption("RAW") // or "USER_ENTERED"
 					.setData(data);
@@ -171,5 +172,25 @@ public class GSheetsApiHandler
 		catch (GoogleJsonResponseException e) {e.printStackTrace();}
 		
 		return result;
+	}
+	
+	
+	public BatchClearValuesResponse deleteRanges(List<String> ranges) throws IOException
+	{
+		BatchClearValuesResponse response = null;
+		BatchClearValuesRequest request = new BatchClearValuesRequest();
+		
+		try
+		{
+			request.setRanges(ranges);
+			response = sheetsService
+					.spreadsheets()
+					.values()
+					.batchClear(spreadsheetId, request)
+					.execute();
+		}
+		catch (GoogleJsonResponseException e) {e.printStackTrace();}
+		
+		return response;
 	}
 }
