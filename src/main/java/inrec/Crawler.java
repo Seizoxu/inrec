@@ -17,6 +17,8 @@ import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import com.google.api.services.sheets.v4.model.ValueRange;
+
 public class Crawler
 {
 	private static final List<String> ALLOWED_STATUSES = List.of("ranked", "approved");
@@ -105,7 +107,9 @@ public class Crawler
 			rankingsFiltered.add(playerData);
 		}
 		
-		sheetsApi.editRange("api_players!A2:F", rankingsFiltered);
+		sheetsApi.editRanges(List.of(new ValueRange()
+				.setRange("api_players!A2:F")
+				.setValues(rankingsFiltered)));
 		System.out.println("[LOG] Updated api_players.");
 		
 		return rankingsFiltered;
@@ -237,7 +241,7 @@ public class Crawler
 		
 
 		// Send hashmap to gsheets tabs. Remember to check lengths.
-		List<List<Object>> playCounts = sheetsApi.getValuesFromRange("api!B11:C47").getValues();
+		List<List<Object>> playCounts = sheetsApi.getValuesFromRange(Range.COUNTS_SCORES.value()).getValues();
 		Map<String, Integer> playCountsMap = new HashMap<>();
 		for (List<Object> row : playCounts)
 		{
@@ -246,12 +250,15 @@ public class Crawler
 					Integer.parseInt(row.get(1).toString()));
 		}
 		
+		List<ValueRange> editData = new ArrayList<>(sortedPlays.size());
 		for (Map.Entry<String, List<List<Object>>> entry : sortedPlays.entrySet())
 		{
-			sheetsApi.editRange(
-					entry.getKey()+"!B"+(2+playCountsMap.get(entry.getKey()))+":I",
-					entry.getValue());
+			editData.add(new ValueRange()
+					.setRange(entry.getKey()+"!B"+(2+playCountsMap.get(entry.getKey()))+":I")
+					.setValues(entry.getValue()));
 		}
+		
+		sheetsApi.editRanges(editData);
 	}
 	
 	
@@ -288,6 +295,7 @@ public class Crawler
 	 */
 	public static void sortAndRemoveDuplicates(GSheetsApiHandler sheetsApi) throws IOException, GeneralSecurityException
 	{
+		List<ValueRange> editData = new ArrayList<>(37);
 		List<String> clearRanges = new ArrayList<>(37);
 		
 		// Will not reorganise EXC.
@@ -324,11 +332,16 @@ public class Crawler
 				}
 			});
 			
-			clearRanges.add(String.format("%s!B%d:I%d", mod, (2 + modSheet.size()), (initialSize-1)));
+			if (initialSize != modSheet.size())
+				{clearRanges.add(String.format("%s!B%d:I%d", mod, (2 + modSheet.size()), (2+initialSize-1)));}
 			
-			sheetsApi.editRange(mod+Range.SCORESHEET_VALUES.value(), modSheet);
+			editData.add(
+					new ValueRange()
+					.setRange(mod+Range.SCORESHEET_VALUES.value())
+					.setValues(modSheet));
 		}
 		
+		sheetsApi.editRanges(editData);
 		sheetsApi.deleteRanges(clearRanges);
 	}
 }

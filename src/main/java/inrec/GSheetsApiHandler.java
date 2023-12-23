@@ -5,7 +5,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.security.GeneralSecurityException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -151,11 +150,8 @@ public class GSheetsApiHandler
 	 * @return BatchUpdateValuesResponse
 	 * @throws IOException
 	 */
-	public BatchUpdateValuesResponse editRange(String range, List<List<Object>> values) throws IOException
+	public BatchUpdateValuesResponse editRanges(List<ValueRange> data) throws IOException
 	{
-		List<ValueRange> data = new ArrayList<>();
-		data.add(new ValueRange().setRange(range).setValues(values));
-
 		BatchUpdateValuesResponse result = null;
 		try
 		{
