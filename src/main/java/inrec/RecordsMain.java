@@ -16,12 +16,12 @@ public class RecordsMain
 		{
 			OsuApiHandler osuApi = new OsuApiHandler(OSU_CLIENT_ID, OSU_CLIENT_SECRET);
 			GSheetsApiHandler sheetsApi = new GSheetsApiHandler(GSHEET_ID);
-			MongoApiHandler.connect(MONGO_URI);
+			MongoWrapper.connect(MONGO_URI);
 			
 //			Crawler.updateSheets(osuApi, sheetsApi);
 			InitialScrape.scrape(osuApi, sheetsApi);
 		}
-//		catch (IOException e) {System.out.println("[ERROR] - IOException."); e.printStackTrace();}
+		catch (IOException e) {System.out.println("[ERROR] - IOException."); e.printStackTrace();}
 //		catch (GeneralSecurityException e) {System.out.println("[ERROR] - Google Sheets Security Error."); e.printStackTrace();}
 		catch (Exception e) {e.printStackTrace();}
 	}
