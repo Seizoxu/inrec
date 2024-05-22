@@ -43,7 +43,7 @@ public class Crawler
 	 * Crawls for user scores updates, and updates scores.
 	 * @throws InterruptedException 
 	 */
-	public static void updateSheets(OsuApiHandler osuApi, GSheetsApiHandler sheetsApi)
+	public static void updateSheets(OsuWrapper osuApi, GSheetsWrapper sheetsApi)
 			throws IOException, GeneralSecurityException, InterruptedException
 	{
 		// Update top 500 players.
@@ -74,7 +74,7 @@ public class Crawler
 	 * @return			JSONArray of player data.
 	 * @throws IOException
 	 */
-	private static List<List<Object>> getAndUpdateTopPlayers(OsuApiHandler osuApi, GSheetsApiHandler sheetsApi,
+	private static List<List<Object>> getAndUpdateTopPlayers(OsuWrapper osuApi, GSheetsWrapper sheetsApi,
 			String country, int pages) throws IOException
 	{
 		// Get top players.
@@ -122,7 +122,7 @@ public class Crawler
 	 * @throws IOException 
 	 * @throws InterruptedException 
 	 */
-	private static List<List<Object>> crawlScores(OsuApiHandler osuApi, List<Integer> ids)
+	private static List<List<Object>> crawlScores(OsuWrapper osuApi, List<Integer> ids)
 			throws IOException, InterruptedException
 	{
 		List<List<Object>> values = new ArrayList<List<Object>>(ids.size()*150);
@@ -132,7 +132,7 @@ public class Crawler
 			// API ratelimit (shouldn't matter too much, 500 ids = 9 mins.
 //			Thread.sleep(300); // 4 requests, probably a second for all of them + 3 secs delay.
 			
-			List<JSONObject> topPlays = osuApi.getPlaysById(userId, "best", 100)
+			List<JSONObject> topPlays = osuApi.getTopPlaysByUserId(userId, "best", 100)
 					.toList().stream()
 					.map(x -> new JSONObject((Map<?, ?>) x))
 					.toList();
@@ -188,7 +188,7 @@ public class Crawler
 	
 	
 	//TODO: Optimise
-	private static void dumpToModSheets(GSheetsApiHandler sheetsApi, List<List<Object>> plays)
+	private static void dumpToModSheets(GSheetsWrapper sheetsApi, List<List<Object>> plays)
 			throws IOException, GeneralSecurityException
 	{
 		// Convert extra mods (MOD_REMAP) to normal.
@@ -293,7 +293,7 @@ public class Crawler
 	 * @throws GeneralSecurityException 
 	 * @throws IOException 
 	 */
-	public static void sortAndRemoveDuplicates(GSheetsApiHandler sheetsApi) throws IOException, GeneralSecurityException
+	public static void sortAndRemoveDuplicates(GSheetsWrapper sheetsApi) throws IOException, GeneralSecurityException
 	{
 		List<ValueRange> editData = new ArrayList<>(37);
 		List<String> clearRanges = new ArrayList<>(37);

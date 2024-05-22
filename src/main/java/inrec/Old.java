@@ -6,7 +6,7 @@ import org.json.JSONObject;
 
 public class Old
 {
-	public static void printScore(OsuApiHandler osuApi, String osuAccessToken, int beatmapID, int userID) throws IOException, InterruptedException
+	public static void printScore(OsuWrapper osuApi, String osuAccessToken, int beatmapID, int userID) throws IOException, InterruptedException
 	{
 		JSONObject responseJson = new JSONObject(osuApi.requestData(
 				String.format("beatmaps/%d/scores/users/%d", beatmapID, userID)));

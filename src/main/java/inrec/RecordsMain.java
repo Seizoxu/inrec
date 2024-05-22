@@ -9,13 +9,14 @@ public class RecordsMain
 	{
 		final String OSU_CLIENT_ID = args[0];
 		final String OSU_CLIENT_SECRET = args[1];
-		final String GSHEET_ID = args[2];
-		final String MONGO_URI = args[3];
+		final String OSU_LEGACY_TOKEN = args[2];
+		final String GSHEET_ID = args[3];
+		final String MONGO_URI = args[4];
 		
 		try
 		{
-			OsuApiHandler osuApi = new OsuApiHandler(OSU_CLIENT_ID, OSU_CLIENT_SECRET);
-			GSheetsApiHandler sheetsApi = new GSheetsApiHandler(GSHEET_ID);
+			OsuWrapper osuApi = new OsuWrapper(OSU_CLIENT_ID, OSU_CLIENT_SECRET, OSU_LEGACY_TOKEN);
+			GSheetsWrapper sheetsApi = new GSheetsWrapper(GSHEET_ID);
 			MongoWrapper.connect(MONGO_URI);
 			
 //			Crawler.updateSheets(osuApi, sheetsApi);

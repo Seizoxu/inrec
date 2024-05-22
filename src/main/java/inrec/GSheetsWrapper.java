@@ -31,7 +31,7 @@ import com.google.auth.Credentials;
 import com.google.auth.http.HttpCredentialsAdapter;
 import com.google.auth.oauth2.GoogleCredentials;
 
-public class GSheetsApiHandler
+public class GSheetsWrapper
 {
 	private static final String GOOGLE_APPLICATION_NAME = "India PP Records";
 	
@@ -41,7 +41,7 @@ public class GSheetsApiHandler
 	private Sheets sheetsService;
 	
 	
-	public GSheetsApiHandler(String spreadsheetId)
+	public GSheetsWrapper(String spreadsheetId)
 	{
 		try
 		{
@@ -96,7 +96,7 @@ public class GSheetsApiHandler
 	
 	private Credentials authoriseServiceCredentials() throws IOException, FileNotFoundException
 	{
-		InputStream in = GSheetsApiHandler.class.getResourceAsStream("/serviceAccountCredentials.json");
+		InputStream in = GSheetsWrapper.class.getResourceAsStream("/serviceAccountCredentials.json");
 		if (in == null) {throw new FileNotFoundException("Resource not found: serviceAccountCredentials.json");}
 		
 		return GoogleCredentials.fromStream(in).createScoped(Collections.singleton(SheetsScopes.SPREADSHEETS));

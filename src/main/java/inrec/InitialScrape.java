@@ -1,10 +1,15 @@
 package inrec;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
+import org.bson.Document;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -17,22 +22,21 @@ public class InitialScrape
 	private static final String COUNTRY = "IN";
 
 	private static final List<String> PP_STATUSES = List.of("ranked", "approved");
-	private static final String[] MOD_ORDER = {
-			"EZ", "NF", "HT",
-			"HR", "SD", "PF", "DT", "NC", "HD", "FL",
-			"SO", "TD"
-	};
 
 	private static RateLimiter batchLimit = new RateLimiter(3, 10);
 	private static RateLimiter unitLimit = new RateLimiter(60, 60);
 	
-	private static OsuApiHandler osuApi;
-	private static GSheetsApiHandler sheetsApi;
+	private static OsuWrapper osuApi;
+	private static GSheetsWrapper sheetsApi;
 
-	private static List<List<Object>> topPlayers;
-	private static List<List<Object>> topPlays;
+	private static List<Document> topPlayers;
+	private static List<Document> topPlays;
+	private static List<Document> newBeatmaps;
+	
+	private static DateTimeFormatter legacyDateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+	private static DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
-	public static void scrape(OsuApiHandler osuApiHandler, GSheetsApiHandler sheetsApiHandler)
+	public static void scrape(OsuWrapper osuApiHandler, GSheetsWrapper sheetsApiHandler)
 			throws IOException
 	{
 		osuApi = osuApiHandler;
@@ -62,8 +66,14 @@ public class InitialScrape
 
 		// -#-#- PART 2 -#-#-
 		// check DB for beatmaps.
+		Thread threadBeatmaps = new Thread(requestRankedBeatmaps);
+		threadBeatmaps.start();
+
+		try {threadBeatmaps.join();}
+		catch (InterruptedException e) {e.printStackTrace();}
 		
-		// if exists, update DB.
+		MongoWrapper.updateBeatmaps(newBeatmaps);
+		Loggerer.logSuccess("INFO", "Updated beatmap collection with latest beatmaps.");
 		
 		// crawl osu for top 50 IN scores on each at 3req/10s
 		// >c each user ID and update DB
@@ -80,12 +90,13 @@ public class InitialScrape
 	private static Runnable requestTopPlayers = () ->
 	{
 		int currentPage = 1;
+		JSONArray rankingPage;
 		JSONArray rankings = new JSONArray();
 		while (currentPage <= NUM_PAGES)
 		{
 			if (batchLimit.allowRequest())
 			{
-				JSONArray rankingPage = osuApi.getUsersByRanking(COUNTRY, currentPage).getJSONArray("ranking");
+				rankingPage = osuApi.getUsersByRanking(COUNTRY, currentPage).getJSONArray("ranking");
 				rankings.putAll(rankingPage);
 
 				Loggerer.logInfo("REQUEST", String.format("Page (%d/%d) retrieved.", currentPage, NUM_PAGES));
@@ -100,31 +111,23 @@ public class InitialScrape
 		Loggerer.logSuccess("INFO", String.format("Retrieved top %d players.", NUM_PAGES*50));
 
 		// Filter top ranks to display relevant info.
-		topPlayers = new ArrayList<List<Object>>(rankings.length());
+		JSONObject currentPlayer;
+		topPlayers = new ArrayList<Document>(rankings.length());
 		for (int i = 0; i < rankings.length(); i++)
 		{
-			JSONObject currentPlayer = rankings.getJSONObject(i);
+			currentPlayer = rankings.getJSONObject(i);
 
-			// For future reference, JSONObjects from org.json do not preserve order.
-			List<Object> playerData = new ArrayList<>();
-			playerData.addAll(List.of(
-					i+1,														// [0] country_rank
-					currentPlayer.getJSONObject("user").getInt("id"),			// [1] user_id
-					currentPlayer.getJSONObject("user").getString("username"),	// [2] username
-					currentPlayer.getInt("global_rank"),						// [3] global_rank
-					currentPlayer.getDouble("pp"),								// [4] pp
-					currentPlayer.getDouble("hit_accuracy")						// [5] hit_accuracy
-					));
-			
-			topPlayers.add(playerData);
+			topPlayers.add(Document.parse(currentPlayer.toString()));
 		}
 	};
 	
 	
 	private static Runnable requestTopPlays = () ->
 	{
-		List<Integer> playerIds = topPlayers.stream().map(x -> (Integer) x.get(1)).toList();
-		topPlays = new ArrayList<List<Object>>(playerIds.size()*150);
+		List<Integer> playerIds = topPlayers.stream()
+				.map(doc -> (doc.getEmbedded(List.of("user", "id"), Integer.class)))
+				.toList();
+		topPlays = new ArrayList<>(playerIds.size()*100);
 		
 		List<JSONObject> currentPlayerTopPlays;
 		for (Integer userId : playerIds)
@@ -133,7 +136,7 @@ public class InitialScrape
 			{
 				if (unitLimit.allowRequest())
 				{
-					currentPlayerTopPlays = osuApi.getPlaysById(userId, "best", 100)
+					currentPlayerTopPlays = osuApi.getTopPlaysByUserId(userId, "best", 100)
 							.toList().stream()
 							.map(x -> new JSONObject((Map<?, ?>) x))
 							.toList();
@@ -152,29 +155,68 @@ public class InitialScrape
 			{
 				if (!PP_STATUSES.contains(play.getJSONObject("beatmap").getString("status"))) {continue;}
 
-				// Order mods
-				String mods = "";
-				for (String mod : MOD_ORDER)
-				{
-					if (play.getJSONArray("mods").toList().contains(mod)) {mods += mod;}
-				}
-				
-				String artistTitleDiff = String.format("%s - %s [%s]",
-						play.getJSONObject("beatmapset").get("artist"),
-						play.getJSONObject("beatmapset").get("title"),
-						play.getJSONObject("beatmap").get("version"));
-				
-				topPlays.add(List.of(
-						userId,										// [0] User ID
-						play.getJSONObject("beatmap").get("id"),	// [1] Map ID
-						play.get("id"),								// [2] Score ID
-						play.getJSONObject("user").get("username"),	// [3] Username
-						artistTitleDiff,							// [4] Artist, Title, Diff
-						play.get("pp"),								// [5] PP
-						mods,										// [6] Mods
-						play.get("created_at")						// [7] Timestamp
-						));
+				topPlays.add(Document.parse(play.toString()));
 			}
 		}
+	};
+	
+	
+	private static Runnable requestRankedBeatmaps = () ->
+	{
+		newBeatmaps = new ArrayList<>();
+		String latestRankedMapDate = MongoWrapper.getLatestBeatmapDate();
+		
+		JSONArray newBeatmapsChunk = new JSONArray();
+		JSONObject currentBeatmap;
+		int mapStatus;
+		Set<String> seenBeatmapIds = new HashSet<>();
+		while(!latestRankedMapDate.isEmpty())
+		{
+			// Request
+			if (batchLimit.allowRequest())
+			{
+				newBeatmapsChunk = osuApi.getBeatmapsSinceDate(latestRankedMapDate);
+				if (newBeatmapsChunk == null) {break;}
+
+				Loggerer.logInfo("REQUEST", String.format(
+						"Retrieved %d beatmaps since %s.",
+						newBeatmapsChunk.length(), latestRankedMapDate));
+			}
+			else // Wait 200ms before retrying.
+			{
+				try {Thread.sleep(200);}
+				catch (InterruptedException e) {e.printStackTrace();}
+				
+				continue;
+			}
+			
+			// Add to list
+			String beatmapId;
+			for (int i = 0; i < newBeatmapsChunk.length(); i++)
+			{
+				// If map is not ranked or approved, skip.
+				currentBeatmap = newBeatmapsChunk.getJSONObject(i);
+				mapStatus = currentBeatmap.getInt("approved");
+				if (mapStatus != 1 && mapStatus != 2) {continue;}
+
+				beatmapId = currentBeatmap.getString("beatmap_id");
+				if (!seenBeatmapIds.contains(beatmapId))
+				{
+					seenBeatmapIds.add(beatmapId);
+					newBeatmaps.add(Document.parse(currentBeatmap.toString()));
+				}
+			}
+			
+			// Update and check for termination
+			String newLatestBeatmapDate = LocalDateTime.parse(
+					newBeatmapsChunk.getJSONObject(newBeatmapsChunk.length() - 1).getString("approved_date"),
+					legacyDateFormatter)
+			.toLocalDate()
+			.format(dateFormatter);
+			
+			if (latestRankedMapDate.equals(newLatestBeatmapDate)) {break;}
+			latestRankedMapDate = newLatestBeatmapDate;
+		}
+		
 	};
 }
